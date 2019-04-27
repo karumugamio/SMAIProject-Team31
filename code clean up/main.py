@@ -24,7 +24,7 @@ def run():
     
     model.loadDataFromLocalFile()
 
-    model.fit()
+    #model.fit()
     input_sentence = "Story of lawyer who loses ability to lie to people because of wish made by his son on birthday evening. this leads to alot of disaster and finally he relize that"
     prediction = model.predict(input_sentence)
 

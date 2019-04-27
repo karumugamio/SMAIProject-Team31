@@ -1,6 +1,7 @@
 import re
 import warnings
 import logging
+import pandas as pd
 
 from nltk.corpus import stopwords
 
@@ -95,9 +96,6 @@ contractions = {
 def getcontractions():
     return contractions
 
-def clean_text_inclstopwords(text):
-    return clean_text(text,False)
-
 def clean_text(text, remove_stopwords = True):
     '''Remove unwanted characters, stopwords, and format the text to create fewer nulls word embeddings'''
     
@@ -146,7 +144,6 @@ def count_words(count_dict, text):
                 count_dict[word] = 1
             else:
                 count_dict[word] += 1
-    return count_dict
 
 
 def write_list_to_file(my_list, filename):
@@ -156,3 +153,38 @@ def write_list_to_file(my_list, filename):
         for entries in my_list:
             outfile.write(entries)
             outfile.write("\n")
+
+def convert_to_ints(text, word_count, unk_count, vocab_to_int,eos=False):
+    '''Convert words in text to an integer.
+       If word is not in vocab_to_int, use UNK's integer.
+       Total the number of words and UNKs.
+       Add EOS token to the end of texts'''
+    ints = []
+    for sentence in text:
+        sentence_ints = []
+        for word in sentence.split():
+            word_count += 1
+            if word in vocab_to_int:
+                sentence_ints.append(vocab_to_int[word])
+            else:
+                sentence_ints.append(vocab_to_int["<UNK>"])
+                unk_count += 1
+        if eos:
+            sentence_ints.append(vocab_to_int["<EOS>"])
+        ints.append(sentence_ints)
+    return ints, word_count, unk_count
+
+def create_lengths(text):
+    '''Create a data frame of the sentence lengths from a text'''
+    lengths = []
+    for sentence in text:
+        lengths.append(len(sentence))
+    return pd.DataFrame(lengths, columns=['counts'])
+
+def unk_counter(sentence,intforUnKnown):
+    '''Counts the number of time UNK appears in a sentence.'''
+    unk_count = 0
+    for word in sentence:
+        if word == intforUnKnown:
+            unk_count += 1
+    return unk_count
