@@ -38,10 +38,11 @@ def warn(arg):
     print(arg)
 
 def prepareData(inputFileName,numberbatchFile):
+    debug('Processing Following Files')
     debug(inputFileName)
     debug(numberbatchFile)
     moviesData = pd.read_csv(inputFileName)
-    debug("Size of data read from file is "+str(moviesData.shape))
+    debug("Dimension of data read from input file is ["+str(moviesData.shape)+"]")
     debug("\nPreview of the Data set")
     debug(moviesData.head())
     debug("\nChecking for Null Values in the data set")
@@ -55,12 +56,12 @@ def prepareData(inputFileName,numberbatchFile):
     debug(moviesData.head())
     debug("\nChecking for Null Values in the data set")
     debug(moviesData.isnull().sum())
-    debug("\nSize of data read after Clean up for the missing data"+str(moviesData.shape))
+    debug("\nSize of data after Clean up["+str(moviesData.shape)+"]")
     
     c_movieSummary =[]
     for summary in moviesData.overview:
         c_movieSummary.append(util.clean_text(summary,remove_stopwords = False))
-    debug("Summaries Cleaned up")
+    debug("Synopsis Cleaned up")
 
     #util.write_list_to_file(c_movieSummary,'summarylist.csv')
     c_movieTagline = []
@@ -70,20 +71,16 @@ def prepareData(inputFileName,numberbatchFile):
     #util.write_list_to_file(c_movieTagline,'taglinelist.csv')
 
 
-    debug(type(c_movieSummary))
-    debug(type(c_movieTagline))
-    debug(len(c_movieSummary))
-    debug(len(c_movieTagline))
+    #debug(type(c_movieSummary))
+    #debug(type(c_movieTagline))
+    #debug(len(c_movieSummary))
+    #debug(len(c_movieTagline))
 
     word_counts = {}
 
-    util.count_words(word_counts, c_movieSummary)
-    print("Size of Vocabulary:", len(word_counts))
-    
-        
+    util.count_words(word_counts, c_movieSummary)      
     util.count_words(word_counts, c_movieTagline)
-            
-    print("Size of Vocabulary:", len(word_counts))
+    debug("Size of Vocabulary Bag:["+str(len(word_counts))+"]")
 
     # Load Conceptnet Numberbatch's (CN) embeddings, similar to GloVe, but probably better 
     # (https://github.com/commonsense/conceptnet-numberbatch)
@@ -95,11 +92,8 @@ def prepareData(inputFileName,numberbatchFile):
             embedding = np.asarray(values[1:], dtype='float32')
             embeddings_index[word] = embedding
 
-    print('Word embeddings:', len(embeddings_index))
-
-
-
-    debug('End of prepareData fn')
+    debug('Word embeddings Size:['+ len(embeddings_index)+']')
+    
     # Find the number of words that are missing from CN, and are used more than our threshold.
     missing_words = 0
     threshold = 20
@@ -225,16 +219,15 @@ def prepareData(inputFileName,numberbatchFile):
     f = open(VOCAB_TO_INT_FLNAME,"wb")
     pickle.dump(vocab_to_int,f)
     f.close()
-    print(type(int_to_vocab))
-    print(type(vocab_to_int))
-    print(type(c_movieTagline))
 
     np.array(c_movieTagline).dump(open(CLEAN_TXT_FLNAME, 'wb'))
-    myArray = np.load(open(CLEAN_TXT_FLNAME, 'rb'),allow_pickle=True)
-
-    print(type(myArray))
+    #myArray = np.load(open(CLEAN_TXT_FLNAME, 'rb'),allow_pickle=True)
+    
     np.array(word_embedding_matrix).dump(open(WORD_EMBEDDING_FLNAME, 'wb'))
     np.array(sorted_synopsis).dump(open(SYNOPSIS_FLNAME, 'wb'))
     np.array(sorted_tagline).dump(open(TAGLINE_FLNAME, 'wb'))
 
+    debug('Data Processing Completed.')
+    debug('All Processed Data Saved as file')
+    debug('End of prepareData() fn')
 

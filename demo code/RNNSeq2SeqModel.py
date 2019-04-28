@@ -60,7 +60,7 @@ class RNNSeq2SeqModel:
         # Parameters related to Train the Model
         self.learning_rate_decay = 0.95
         self.min_learning_rate = 0.0005
-        self.display_step = 20 # Check training loss after every 20 batches
+        self.display_step = 5 # Check training loss after every 20 batches
         self.stop_early = 0 
         self.stop = 3 # If the update loss does not decrease in 3 consecutive update checks, stop training
         self.per_epoch = 3 # Make 3 update checks per epoch
@@ -137,7 +137,7 @@ class RNNSeq2SeqModel:
                 batch_loss = 0 
                 intValueForPad = self.vocab_to_int['<PAD>']    
                 for batch_i, (summaries_batch, texts_batch, summaries_lengths, texts_lengths) in enumerate(rnnhelper.get_batches(sorted_synopsis_train, sorted_tagline_train, self.batch_size,intValueForPad)):
-                    
+                    debug('Training Epoch #['+str(epoch_i)+'] Batch number ['+str(batch_i)+']')
                     start_time = time.time()
                     _, loss = sess.run([train_op, cost],{input_data: texts_batch,targets: summaries_batch,lr: self.learning_rate,summary_length: summaries_lengths,text_length: texts_lengths,keep_prob: self.keep_probability})          
                     batch_loss += loss
@@ -145,10 +145,12 @@ class RNNSeq2SeqModel:
                     end_time = time.time()
                     batch_time = end_time - start_time
                     if batch_i % self.display_step == 0 and batch_i > 0:
+                        debug('Training Epoch #['+str(epoch_i)+'] Batch number ['+str(batch_i)+']')
+                        debug('Loss #['+str(epoch_i)+'] Seconds ['+str(batch_i)+']')
                         debug('Epoch {:>3}/{} Batch {:>4}/{} - Loss: {:>6.3f}, Seconds: {:>4.2f}'.format(epoch_i,self.epochs,batch_i,len(sorted_tagline_train) // self.batch_size, batch_loss / self.display_step,batch_time*self.display_step))
                         batch_loss = 0
                     if batch_i % self.update_check == 0 and batch_i > 0:
-                        #debug("Average loss for this update:"+str(round(self.update_loss/self.update_check,3)))
+                        debug("Average loss for this update:"+str(round(self.update_loss/self.update_check,3)))
                         summary_update_loss.append(self.update_loss)
 
                         # If the update loss is at a new minimum, save the model
@@ -215,6 +217,38 @@ class RNNSeq2SeqModel:
         debug('  Word Ids:       {}'.format([i for i in predictionsValue if i != pad]))
         debug('  Response Words: {}'.format(" ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])))
         debug("predict values")
+        returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
+        return returnPredict
+    
+    def getGenerateTagline(self,predictionsValue):
+        pad = self.vocab_to_int["<PAD>"] 
+        returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
+        return returnPredict 
+
+
+    def predictFromProcessedSentence(self,text):
+        checkpoint = CHECKPOINT_BEST_MODEL_FILE
+
+        loaded_graph = tf.Graph()
+        with tf.Session(graph=loaded_graph) as sess:
+            # Load saved model
+            loader = tf.train.import_meta_graph(checkpoint + '.meta')
+            loader.restore(sess, checkpoint)
+
+            input_data = loaded_graph.get_tensor_by_name('input:0')
+            predObj = loaded_graph.get_tensor_by_name('predictions:0')
+            text_length = loaded_graph.get_tensor_by_name('text_length:0')
+            summary_length = loaded_graph.get_tensor_by_name('summary_length:0')
+            keep_prob = loaded_graph.get_tensor_by_name('keep_prob:0')
+    
+            #Multiply by batch_size to match the model's input parameters
+            predictionsValue = sess.run(predObj, {input_data: [text]*self.batch_size, 
+                                      summary_length: [np.random.randint(5,8)], 
+                                      text_length: [len(text)]*self.batch_size,
+                                      keep_prob: 1.0})[0] 
+
+        # Remove the padding from the tweet
+        pad = self.vocab_to_int["<PAD>"] 
         returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
         return returnPredict
 
@@ -286,3 +320,32 @@ class RNNSeq2SeqModel:
         '''Prepare the text for the model'''
         text = util.clean_text(text)
         return [self.vocab_to_int.get(word, self.vocab_to_int['<UNK>']) for word in text.split()]
+    
+    def runValidation(self):
+        predictionResults = []
+        predictionScores=[]
+        for index,inputSentence in enumerate(self.sorted_synopsis_validation):
+            prectionResult = self.predictFromProcessedSentence(inputSentence)
+            predictionResults.append(prectionResult)
+            #print(inputSentence)
+            #print(prectionResult)
+            tag = self.getGenerateTagline(self.sorted_tagline_validation[index])
+            score = rnnhelper.getScore(prectionResult,tag)
+            predictionScores.append(score)
+        debug('Validation Completed')
+        return predictionResults,self.sorted_tagline_validation ,predictionScores
+
+    def runTestDataSet(self):
+        predictionResults = []
+        predictionScores=[]
+        for index,inputSentence in enumerate(self.sorted_synopsis_test):
+            prectionResult = self.predictFromProcessedSentence(inputSentence)
+            predictionResults.append(prectionResult)
+            #print(inputSentence)
+            #print(prectionResult)
+            tag = self.getGenerateTagline(self.sorted_tagline_validation[index])
+            score = rnnhelper.getScore(prectionResult,tag)
+            predictionScores.append(score)
+        debug('Validation Completed')
+        return predictionResults,self.sorted_tagline_validation ,predictionScores
+        

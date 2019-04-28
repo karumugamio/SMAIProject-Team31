@@ -224,12 +224,11 @@ def get_batches(summaries, texts, batch_size,intValueForPad):
         
         yield pad_summaries_batch, pad_texts_batch, pad_summaries_lengths, pad_texts_lengths
 
-def getScore(predictionList,originalList):
-
+def getScore(m_prediction,m_original):
+    
         rouge = Rouge()
-        scores = rouge.get_scores(predictionList, originalList)
-        debug("Score for this model is ")
-        debug(scores)
+        scores = rouge.get_scores(m_prediction,m_original)
+        debug('['+m_prediction+']['+m_original+'] = >score is['+str(scores)+']')
         return scores
 
 
