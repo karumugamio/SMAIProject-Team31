@@ -22,7 +22,7 @@ def run():
     debug("CSE471 SMAI - Spring 2019 - Project - Team 31")
     model = RNNSeq2SeqModel()
     
-    model.loadDataFromLocalFile()
+    model.loadData(0.2,0.2)
 
     #model.fit()
     input_sentence = "Story of lawyer who loses ability to lie to people because of wish made by his son on birthday evening. this leads to alot of disaster and finally he relize that"

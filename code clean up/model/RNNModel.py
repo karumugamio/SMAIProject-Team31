@@ -1,25 +1,32 @@
-import re
-import warnings
 import logging
+import math
 import os
+import pickle
+import re
+import time
+import warnings
 
 import nltk
 import numpy as np
 import pandas as pd
-from nltk.corpus import stopwords
-import time
-import pickle
-import json
-
-import Preprocessing.datautil as util
-import model.RNNHelper as rnnhelper
 import tensorflow as tf
+from nltk.corpus import stopwords
+import model.RNNHelper as rnnhelper
+import Preprocessing.datautil as util
 
-CHECKPOINT = ''
+
+CHECKPOINT_BEST_MODEL_FILE = 'best_model.ckpt'
 CHECKPOINT_METAFILE = ''
 
+INT_TO_VOCAB_FLNAME = 'data\int_to_vocab.pkl'
+VOCAB_TO_INT_FLNAME = 'data\\vocab_to_int.pkl'
+CLEAN_TXT_FLNAME = 'data\cleantxt.npy'
+WORD_EMBEDDING_FLNAME = 'data\word_embedding_matrix.npy'
+SYNOPSIS_FLNAME = 'data\sorted_synopsis.npy'
+TAGLINE_FLNAME = 'data\sorted_tagline.npy'
 
-logging.basicConfig(level=logging.WARN,format='%(asctime)s %(levelname)s %(message)s')
+
+logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s %(message)s')
 
 def debug(arg):
     logging.debug(arg)
@@ -39,17 +46,20 @@ class RNNSeq2SeqModel:
         self.learning_rate = 0.005
         self.keep_probability = 0.75
         self.vocab_to_int = {}
-        self.sorted_summaries = []
-        self.sorted_texts = []
         self.word_embedding_matrix=[]
         self.int_to_vocab = {}
         self.clean_texts = {}
-
+        self.sorted_synopsis = []
+        self.sorted_tagline = []
+        self.sorted_synopsis_validation = []
+        self.sorted_tagline_validation = []
+        self.sorted_synopsis_test = []
+        self.sorted_tagline_test = []
 
         # Parameters related to Train the Model
         self.learning_rate_decay = 0.95
         self.min_learning_rate = 0.0005
-        self.display_step = 20 # Check training loss after every 20 batches
+        self.display_step = 5 # Check training loss after every 20 batches
         self.stop_early = 0 
         self.stop = 3 # If the update loss does not decrease in 3 consecutive update checks, stop training
         self.per_epoch = 3 # Make 3 update checks per epoch
@@ -104,18 +114,16 @@ class RNNSeq2SeqModel:
                 train_op = optimizer.apply_gradients(capped_gradients)
 
         debug("Graph is built.")
+        debug("Size of Training Data.")
+        sorted_synopsis_train = self.sorted_synopsis
+        sorted_tagline_train = self.sorted_tagline
+        debug(len(sorted_synopsis_train))
+        debug(len(sorted_tagline_train))
 
-        start = 2000
-        end = start + 5000
-        sorted_summaries_short = self.sorted_summaries[start:end]
-        sorted_texts_short = self.sorted_texts[start:end]
-        print("The shortest text length:", len(sorted_texts_short[0]))
-        print("The longest text length:",len(sorted_texts_short[-1]))
-
-        self.update_check = (len(sorted_texts_short)//self.batch_size//self.per_epoch)-1
+        self.update_check = (len(sorted_tagline_train)//self.batch_size//self.per_epoch)-1
 
         summary_update_loss = []
-        checkpoint = "best_model.ckpt" 
+        checkpoint = CHECKPOINT_BEST_MODEL_FILE
         
         with tf.Session(graph=train_graph) as sess:
             sess.run(tf.global_variables_initializer())
@@ -127,8 +135,8 @@ class RNNSeq2SeqModel:
                 update_loss = 0
                 batch_loss = 0 
                 intValueForPad = self.vocab_to_int['<PAD>']    
-                for batch_i, (summaries_batch, texts_batch, summaries_lengths, texts_lengths) in enumerate(rnnhelper.get_batches(sorted_summaries_short, sorted_texts_short, self.batch_size,intValueForPad)):
-                    
+                for batch_i, (summaries_batch, texts_batch, summaries_lengths, texts_lengths) in enumerate(rnnhelper.get_batches(sorted_synopsis_train, sorted_tagline_train, self.batch_size,intValueForPad)):
+                    debug('Training Epoch #['+str(epoch_i)+'] Batch number ['+str(batch_i)+']')
                     start_time = time.time()
                     _, loss = sess.run([train_op, cost],{input_data: texts_batch,targets: summaries_batch,lr: self.learning_rate,summary_length: summaries_lengths,text_length: texts_lengths,keep_prob: self.keep_probability})          
                     batch_loss += loss
@@ -136,7 +144,9 @@ class RNNSeq2SeqModel:
                     end_time = time.time()
                     batch_time = end_time - start_time
                     if batch_i % self.display_step == 0 and batch_i > 0:
-                        debug('Epoch {:>3}/{} Batch {:>4}/{} - Loss: {:>6.3f}, Seconds: {:>4.2f}'.format(epoch_i,self.epochs,batch_i,len(sorted_texts_short) // self.batch_size, batch_loss / self.display_step,batch_time*self.display_step))
+                        debug('Training Epoch #['+str(epoch_i)+'] Batch number ['+str(batch_i)+']')
+                        debug('Loss #['+str(epoch_i)+'] Seconds ['+str(batch_i)+']')
+                        debug('Epoch {:>3}/{} Batch {:>4}/{} - Loss: {:>6.3f}, Seconds: {:>4.2f}'.format(epoch_i,self.epochs,batch_i,len(sorted_tagline_train) // self.batch_size, batch_loss / self.display_step,batch_time*self.display_step))
                         batch_loss = 0
                     if batch_i % self.update_check == 0 and batch_i > 0:
                         debug("Average loss for this update:"+str(round(self.update_loss/self.update_check,3)))
@@ -173,7 +183,7 @@ class RNNSeq2SeqModel:
         #input_sentence = clean_texts[random]
         #text = text_to_seq(clean_texts[random])
 
-        checkpoint = "data/best_model.ckpt"
+        checkpoint = CHECKPOINT_BEST_MODEL_FILE
 
         loaded_graph = tf.Graph()
         with tf.Session(graph=loaded_graph) as sess:
@@ -208,40 +218,133 @@ class RNNSeq2SeqModel:
         debug("predict values")
         returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
         return returnPredict
-
-    def predictandPresent(self):
-        debug("predict values")
-
     
-    def run (self):
-        
-        # Create your own review or use one from the dataset
-        #input_sentence = "I have never eaten an apple before, but this red one was nice. \
-                        #I think that I will try a green apple next time."
-        #text = text_to_seq(input_sentence)
-        debug("runrun")
+    def getGenerateTagline(self,predictionsValue):
+        pad = self.vocab_to_int["<PAD>"] 
+        returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
+        return returnPredict 
 
-    def loadDataFromLocalFile(self):
-        infile = open('data\int_to_vocab.pkl','rb')
+
+    def predictFromProcessedSentence(self,text):
+        checkpoint = CHECKPOINT_BEST_MODEL_FILE
+
+        loaded_graph = tf.Graph()
+        with tf.Session(graph=loaded_graph) as sess:
+            # Load saved model
+            loader = tf.train.import_meta_graph(checkpoint + '.meta')
+            loader.restore(sess, checkpoint)
+
+            input_data = loaded_graph.get_tensor_by_name('input:0')
+            predObj = loaded_graph.get_tensor_by_name('predictions:0')
+            text_length = loaded_graph.get_tensor_by_name('text_length:0')
+            summary_length = loaded_graph.get_tensor_by_name('summary_length:0')
+            keep_prob = loaded_graph.get_tensor_by_name('keep_prob:0')
+    
+            #Multiply by batch_size to match the model's input parameters
+            predictionsValue = sess.run(predObj, {input_data: [text]*self.batch_size, 
+                                      summary_length: [np.random.randint(5,8)], 
+                                      text_length: [len(text)]*self.batch_size,
+                                      keep_prob: 1.0})[0] 
+
+        # Remove the padding from the tweet
+        pad = self.vocab_to_int["<PAD>"] 
+        returnPredict =  " ".join([self.int_to_vocab[i] for i in predictionsValue if i != pad])
+        return returnPredict
+
+
+    '''
+    validationRatio and testRatio should be in decimal values less than 1.0
+
+    '''
+    def loadData(self,validationRatio,testRatio=0):
+        infile = open(INT_TO_VOCAB_FLNAME,'rb')
         self.int_to_vocab  = pickle.load(infile)
         infile.close()
 
-        infile = open("data\\vocab_to_int.pkl",'rb')
+        infile = open(VOCAB_TO_INT_FLNAME,'rb')
         self.vocab_to_int  = pickle.load(infile)
         infile.close()
 
-        myArray = np.load(open('data\cleantxt.npy', 'rb'),allow_pickle=True)
+        myArray = np.load(open(CLEAN_TXT_FLNAME, 'rb'),allow_pickle=True)
 
         self.clean_texts = myArray.tolist()
 
-        self.word_embedding_matrix = np.load(open('data\word_embedding_matrix.npy', 'rb'),allow_pickle=True)
+        self.word_embedding_matrix = np.load(open(WORD_EMBEDDING_FLNAME, 'rb'),allow_pickle=True)
 
-        self.sorted_summaries = np.load(open('data\sorted_summaries.npy', 'rb'),allow_pickle=True).tolist()    
-        self.sorted_texts = np.load(open('data\sorted_texts.npy', 'rb'),allow_pickle=True).tolist()    
+        rawSynopsis = np.load(open(SYNOPSIS_FLNAME, 'rb'),allow_pickle=True).tolist()    
+        rawtagLine = np.load(open(TAGLINE_FLNAME, 'rb'),allow_pickle=True).tolist()    
 
+        lengthOfData = len(rawSynopsis)
+        debug("Total Data set Size")
+        debug(lengthOfData)
+        if(testRatio == 0):
+            debug("Spliting data into Train and validation")
+
+            sizeOftrain = lengthOfData * (1-validationRatio)
+            trainsize = math.ceil(sizeOftrain)
+
+            debug(sizeOftrain)
+            debug(trainsize)
+            for i in range(lengthOfData): 
+                if(trainsize > i):
+                    self.sorted_synopsis.append(rawSynopsis[i])
+                    self.sorted_tagline.append(rawtagLine[i])
+                else:
+                    self.sorted_synopsis_validation.append(rawSynopsis[i])
+                    self.sorted_tagline_validation.append(rawtagLine[i])
+        else :
+            debug("Spliting data into Train ,validation and test")
+            sizeOftrain = lengthOfData * (1-validationRatio-testRatio)
+            trainsize = math.ceil(sizeOftrain)
+            sizeOfVal = lengthOfData * (validationRatio)
+            valsize = math.ceil(sizeOfVal)
+            debug(sizeOftrain)
+            debug(trainsize)
+            debug(sizeOfVal)
+            debug(valsize)
+
+            for i in range(lengthOfData): 
+                if(trainsize > i):
+                    self.sorted_synopsis.append(rawSynopsis[i])
+                    self.sorted_tagline.append(rawtagLine[i])
+                elif((trainsize+valsize) > i):
+                    self.sorted_synopsis_validation.append(rawSynopsis[i])
+                    self.sorted_tagline_validation.append(rawtagLine[i])
+                else:
+                    self.sorted_synopsis_test.append(rawSynopsis[i])
+                    self.sorted_tagline_test.append(rawtagLine[i])         
         debug("Load Completed")
         
     def text_to_seq(self,text):
         '''Prepare the text for the model'''
         text = util.clean_text(text)
         return [self.vocab_to_int.get(word, self.vocab_to_int['<UNK>']) for word in text.split()]
+    
+    def runValidation(self):
+        predictionResults = []
+        predictionScores=[]
+        for index,inputSentence in enumerate(self.sorted_synopsis_validation):
+            prectionResult = self.predictFromProcessedSentence(inputSentence)
+            predictionResults.append(prectionResult)
+            #print(inputSentence)
+            #print(prectionResult)
+            tag = self.getGenerateTagline(self.sorted_tagline_validation[index])
+            score = rnnhelper.getScore(prectionResult,tag)
+            predictionScores.append(score)
+        debug('Validation Completed')
+        return predictionResults,self.sorted_tagline_validation ,predictionScores
+
+    def runTestDataSet(self):
+        predictionResults = []
+        predictionScores=[]
+        for index,inputSentence in enumerate(self.sorted_synopsis_test):
+            prectionResult = self.predictFromProcessedSentence(inputSentence)
+            predictionResults.append(prectionResult)
+            #print(inputSentence)
+            #print(prectionResult)
+            tag = self.getGenerateTagline(self.sorted_tagline_validation[index])
+            score = rnnhelper.getScore(prectionResult,tag)
+            predictionScores.append(score)
+        debug('Validation Completed')
+        return predictionResults,self.sorted_tagline_validation ,predictionScores
+        

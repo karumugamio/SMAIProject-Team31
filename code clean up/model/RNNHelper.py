@@ -5,15 +5,16 @@ import logging
 import nltk
 import numpy as np
 import pandas as pd
+from rouge import Rouge
 from nltk.corpus import stopwords
 
 import Preprocessing.datautil as util
 import tensorflow as tf
 from tensorflow.python.layers.core import Dense
-from tensorflow.python.ops.rnn_cell_impl import _zero_state_tensors
 
 
-logging.basicConfig(level=logging.WARN,format='%(asctime)s %(levelname)s %(message)s')
+
+logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s %(message)s')
 
 def debug(arg):
     logging.debug(arg)
@@ -136,10 +137,6 @@ def decoding_layer(dec_embed_input, embeddings, enc_output, enc_state, vocab_siz
                                                         attn_mech,
                                                         rnn_size)
             
-    #initial_state = tf.contrib.seq2seq.AttentionWrapperState(enc_state[0],
-    #                                                                _zero_state_tensors(rnn_size, 
-    #                                                                                    batch_size, 
-    #                                                                                    tf.float32)) 
     initial_state = dec_cell.zero_state(batch_size=batch_size,dtype=tf.float32).clone(cell_state=enc_state[0])
 
     with tf.variable_scope("decode"):
@@ -226,3 +223,12 @@ def get_batches(summaries, texts, batch_size,intValueForPad):
             pad_texts_lengths.append(len(text))
         
         yield pad_summaries_batch, pad_texts_batch, pad_summaries_lengths, pad_texts_lengths
+
+def getScore(m_prediction,m_original):
+    
+        rouge = Rouge()
+        scores = rouge.get_scores(m_prediction,m_original)
+        debug('['+m_prediction+']['+m_original+'] = >score is['+str(scores)+']')
+        return scores
+
+

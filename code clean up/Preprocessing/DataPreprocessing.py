@@ -17,6 +17,14 @@ import datautil as util
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s %(message)s')
 
 inputDataFileName = 'data/movies_data.csv'
+
+INT_TO_VOCAB_FLNAME = 'data\int_to_vocab.pkl'
+VOCAB_TO_INT_FLNAME = 'data\\vocab_to_int.pkl'
+CLEAN_TXT_FLNAME = 'data\cleantxt.npy'
+WORD_EMBEDDING_FLNAME = 'data\word_embedding_matrix.npy'
+SYNOPSIS_FLNAME = 'data\sorted_synopsis.npy'
+TAGLINE_FLNAME = 'data\sorted_tagline.npy'
+
 def debug(arg):
     #logging.debug(arg)
     print(arg)
@@ -29,15 +37,12 @@ def warn(arg):
     #logging.warn(arg)
     print(arg)
 
-def run():
-    #nltk.download("stopwords") - Verify how to do this effectively. - Loading stop words
-    prepareData(inputDataFileName)
-    debug('End of the program')
-
-def prepareData(inputFileName):
-
+def prepareData(inputFileName,numberbatchFile):
+    debug('Processing Following Files')
+    debug(inputFileName)
+    debug(numberbatchFile)
     moviesData = pd.read_csv(inputFileName)
-    debug("Size of data read from file is "+str(moviesData.shape))
+    debug("Dimension of data read from input file is ["+str(moviesData.shape)+"]")
     debug("\nPreview of the Data set")
     debug(moviesData.head())
     debug("\nChecking for Null Values in the data set")
@@ -51,12 +56,12 @@ def prepareData(inputFileName):
     debug(moviesData.head())
     debug("\nChecking for Null Values in the data set")
     debug(moviesData.isnull().sum())
-    debug("\nSize of data read after Clean up for the missing data"+str(moviesData.shape))
+    debug("\nSize of data after Clean up["+str(moviesData.shape)+"]")
     
     c_movieSummary =[]
     for summary in moviesData.overview:
         c_movieSummary.append(util.clean_text(summary,remove_stopwords = False))
-    debug("Summaries Cleaned up")
+    debug("Synopsis Cleaned up")
 
     #util.write_list_to_file(c_movieSummary,'summarylist.csv')
     c_movieTagline = []
@@ -66,36 +71,29 @@ def prepareData(inputFileName):
     #util.write_list_to_file(c_movieTagline,'taglinelist.csv')
 
 
-    debug(type(c_movieSummary))
-    debug(type(c_movieTagline))
-    debug(len(c_movieSummary))
-    debug(len(c_movieTagline))
+    #debug(type(c_movieSummary))
+    #debug(type(c_movieTagline))
+    #debug(len(c_movieSummary))
+    #debug(len(c_movieTagline))
 
     word_counts = {}
 
-    util.count_words(word_counts, c_movieSummary)
-    print("Size of Vocabulary:", len(word_counts))
-    
-        
+    util.count_words(word_counts, c_movieSummary)      
     util.count_words(word_counts, c_movieTagline)
-            
-    print("Size of Vocabulary:", len(word_counts))
+    debug("Size of Vocabulary Bag:["+str(len(word_counts))+"]")
 
     # Load Conceptnet Numberbatch's (CN) embeddings, similar to GloVe, but probably better 
     # (https://github.com/commonsense/conceptnet-numberbatch)
     embeddings_index = {}
-    with open('data/numberbatch-en.txt', encoding='utf-8') as f:
+    with open(numberbatchFile, encoding='utf-8') as f:
         for line in f:
             values = line.split(' ')
             word = values[0]
             embedding = np.asarray(values[1:], dtype='float32')
             embeddings_index[word] = embedding
 
-    print('Word embeddings:', len(embeddings_index))
-
-
-
-    debug('End of prepareData fn')
+    debug('Word embeddings Size:['+ len(embeddings_index)+']')
+    
     # Find the number of words that are missing from CN, and are used more than our threshold.
     missing_words = 0
     threshold = 20
@@ -187,9 +185,10 @@ def prepareData(inputFileName):
     debug(np.percentile(lengths_summaries.counts, 95))
     debug(np.percentile(lengths_summaries.counts, 99))
 
-
-    sorted_summaries = []
-    sorted_texts = []
+    #sorted_synopsis
+    sorted_synopsis = []
+    #sorted_tagline
+    sorted_tagline = []
     max_text_length = 84
     max_summary_length = 13
     min_length = 2
@@ -206,33 +205,29 @@ def prepareData(inputFileName):
                 util.unk_counter(int_texts[count],intforUnKnown) <= unk_text_limit and
                 length == len(int_texts[count])
             ):
-                sorted_summaries.append(int_summaries[count])
-                sorted_texts.append(int_texts[count])
+                sorted_synopsis.append(int_summaries[count])
+                sorted_tagline.append(int_texts[count])
             
     # Compare lengths to ensure they match
-    debug(len(sorted_summaries))
-    debug(len(sorted_texts))
+    debug(len(sorted_synopsis))
+    debug(len(sorted_tagline))
 
-    f = open("int_to_vocab.pkl","wb")
+    f = open(INT_TO_VOCAB_FLNAME,"wb")
     pickle.dump(int_to_vocab,f)
     f.close()
 
-    f = open("vocab_to_int.pkl","wb")
+    f = open(VOCAB_TO_INT_FLNAME,"wb")
     pickle.dump(vocab_to_int,f)
     f.close()
-    print(type(int_to_vocab))
-    print(type(vocab_to_int))
-    print(type(c_movieTagline))
 
-    np.array(c_movieTagline).dump(open('cleantxt.npy', 'wb'))
-    myArray = np.load(open('cleantxt.npy', 'rb'),allow_pickle=True)
+    np.array(c_movieTagline).dump(open(CLEAN_TXT_FLNAME, 'wb'))
+    #myArray = np.load(open(CLEAN_TXT_FLNAME, 'rb'),allow_pickle=True)
+    
+    np.array(word_embedding_matrix).dump(open(WORD_EMBEDDING_FLNAME, 'wb'))
+    np.array(sorted_synopsis).dump(open(SYNOPSIS_FLNAME, 'wb'))
+    np.array(sorted_tagline).dump(open(TAGLINE_FLNAME, 'wb'))
 
-    print(type(myArray))
-    np.array(word_embedding_matrix).dump(open('word_embedding_matrix.npy', 'wb'))
-    np.array(sorted_summaries).dump(open('sorted_summaries.npy', 'wb'))
-    np.array(sorted_texts).dump(open('sorted_texts.npy', 'wb'))
+    debug('Data Processing Completed.')
+    debug('All Processed Data Saved as file')
+    debug('End of prepareData() fn')
 
-
-# Calling main function
-if __name__ == "__main__":
-	run()

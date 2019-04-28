@@ -54,9 +54,10 @@ def log_error(e):
 
 
 def main():
-    raw_html = simple_get('https://realpython.com/blog/')
+    raw_html = simple_get('http://www.impawards.com/taglines/a1.html')
     print(len(raw_html))
-    html = BeautifulSoup(raw_html, 'html.parser')
+    #html = BeautifulSoup(raw_html, 'html.parser')
+    soup = BeautifulSoup(raw_html, 'html5lib') 
 
 if __name__ == "__main__":
     main()
