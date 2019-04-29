@@ -1,10 +1,12 @@
 import re
+import math
 import warnings
 import logging
 
 import nltk
 import numpy as np
 import pandas as pd
+from collections import Counter
 from rouge import Rouge
 from nltk.corpus import stopwords
 
@@ -13,6 +15,9 @@ import tensorflow as tf
 from tensorflow.python.layers.core import Dense
 
 
+
+
+WORD = re.compile(r'\w+')
 
 logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s %(message)s')
 
@@ -231,4 +236,27 @@ def getScore(m_prediction,m_original):
         debug('['+m_prediction+']['+m_original+'] = >score is['+str(scores)+']')
         return scores
 
+def getCosineScore(m_prediction,m_original):
+      
+        vec1 = text_to_vector(m_prediction)
+        vec2 = text_to_vector(m_original)
 
+        intersection = set(vec1.keys()) & set(vec2.keys())
+        numerator = sum([vec1[x] * vec2[x] for x in intersection])
+
+        sum1 = sum([vec1[x]**2 for x in vec1.keys()])
+        sum2 = sum([vec2[x]**2 for x in vec2.keys()])
+        denominator = math.sqrt(sum1) * math.sqrt(sum2)
+
+        if not denominator:
+            scores = 0.0
+        else:
+            scores = float(numerator) / denominator
+        
+        debug('['+m_prediction+']['+m_original+'] = >score is['+str(scores)+']')
+
+        return scores
+
+def text_to_vector(text):
+     words = WORD.findall(text)
+     return Counter(words)
