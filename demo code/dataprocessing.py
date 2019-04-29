@@ -92,7 +92,7 @@ def prepareData(inputFileName,numberbatchFile):
             embedding = np.asarray(values[1:], dtype='float32')
             embeddings_index[word] = embedding
 
-    debug('Word embeddings Size:['+ len(embeddings_index)+']')
+    debug('Word embeddings Size:['+ str(len(embeddings_index))+']')
     
     # Find the number of words that are missing from CN, and are used more than our threshold.
     missing_words = 0
